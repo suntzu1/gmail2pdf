@@ -1,0 +1,60 @@
+function ReadEmailTextAndAttachment(auth, message_id, markread){
+  var text1 = ''; 
+  var message_id='166f83df64b48635'
+  gmail.users.messages.get({ auth: auth, userId: 'me', id:message_id,format:'full' },
+    function (err, response) {
+      if (err) {
+        console.log('The API returned an error: ' + err);
+        return;
+      }
+    
+    var emailConfig=response['data'].payload.parts;
+        for(var i = 0; i < emailConfig.length; i++){
+    if(emailConfig[i].mimeType=="application/pdf"){
+        var pdf_attachmentId=emailConfig[i].body.attachmentId;
+        if(pdf_attachmentId!==null){
+            GetAttachmentDataToPdf(auth,message_id,pdf_attachmentId);
+        }
+    }else{
+        var parts=emailConfig[i].parts;
+        for(var j=0;j<parts.length;j++){
+            if(parts[j].mimeType=="text/plain"){
+                GetEmailBodymessageToPdf(parts[j].body.data); 
+            }
+        }
+    }
+}
+    });
+
+
+}
+
+function GetAttachmentDataToPdf(auth,message_id,pdf_attachmentId){
+    gmail.users.messages.attachments.get({ auth: auth, userId: 'me', id:pdf_attachmentId,messageId:message_id },
+    function (err, response) {
+      if (err) {
+        console.log('The API returned an error: ' + err);
+        return;
+      }
+      var pdfData=response['data'].data;
+
+     var y= base64url.decode(pdfData)
+      text1 = y.toString();
+      var doc = new PDFDocument();
+      doc.pipe(fs.createWriteStream('attachedPdfdata.pdf'));
+      doc.text(text1, 100, 80);
+      doc.end();
+    });
+
+
+}
+
+
+function GetEmailBodymessageToPdf(message){
+    var y= base64url.decode(message)
+    text1 = y.toString();
+    var doc = new PDFDocument();
+    doc.pipe(fs.createWriteStream('emailBodyMessage.pdf'));
+    doc.text(text1, 100, 80);
+    doc.end();
+}

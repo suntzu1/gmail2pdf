@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "base64-url": "^2.2.0",
+    "base64topdf": "^1.1.8",
+    "googleapis": "^34.0.0",
+    "html-pdf": "^2.2.0",
+    "pdf-merge": "^1.1.0",
+    "pdfkit": "^0.8.3",
+    "pdftk": "0.0.0-rc.0",
+    "rxjs": "^6.3.3",
+    "ts-node": "^7.0.1",
+    "typescript": "^3.1.6"
+  }
+}
