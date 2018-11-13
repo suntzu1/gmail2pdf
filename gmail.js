@@ -174,7 +174,7 @@ function AddToList(messageid, filename) {
 
 function ReadEmailTextAndAttachment(auth, message_id, markread) {
   // Retreive the actual message using the message id
-  gmail.users.messages.get({ auth: auth, userId: 'me', id: message_id },
+  gmail.users.messages.get({ auth: auth, userId: 'me', id: message_id, format: 'raw' },
     function (err, response) {
       if (err) {
         console.log('The API returned an error: ' + err);
@@ -182,19 +182,24 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
       }
       console.log(response['data']);
       var message_raw = ''
-      for (i = 0; i < response.data.payload.parts.length; ++i) {
-        var part = response.data.payload.parts[i];
-        var isAttch = part.body.attachmentId != null;
-        if (!isAttch) {
-          message_raw += part.body.data;
-        }
-        else {
-          // handle attachment
-          gmail.users.messages.attachments.get({ auth: this.gauth, userId: 'me', messageId: this.gmid, id: part.body.attachmentId },
-            function (err, response) {
-              AddToList(this.aMsgId, this.aMsgId + '_' + this.aFilename);
-              base64topdf.base64Decode(response.data.data, this.aMsgId + '_' + this.aFilename);
-            }.bind({ aFilename: part.filename, aMsgId: this.gmid }));
+      debugger;
+      if (response.data.raw) {
+        message_raw = response.data.raw;
+      } else {
+        for (i = 0; i < response.data.payload.parts.length; ++i) {
+          var part = response.data.payload.parts[i];
+          var isAttch = part.body.attachmentId != null;
+          if (!isAttch) {
+            message_raw += part.body.data;
+          }
+          else {
+            // handle attachment
+            gmail.users.messages.attachments.get({ auth: this.gauth, userId: 'me', messageId: this.gmid, id: part.body.attachmentId },
+              function (err, response) {
+                AddToList(this.aMsgId, this.aMsgId + '_' + this.aFilename);
+                base64topdf.base64Decode(response.data.data, this.aMsgId + '_' + this.aFilename);
+              }.bind({ aFilename: part.filename, aMsgId: this.gmid }));
+          }
         }
       }
       if (message_raw) {
@@ -221,7 +226,7 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
           console.log(res); // { filename: '/app/businesscard.pdf' }
           const fls = messageQ.find(f => f.m === msid);
           if (fls.f.length > 1) {
-                debugger;
+            debugger;
             pdfmerge(fls.f, { output: 'output/full_' + msid + '.pdf' })
               .then((buffer) => {
                 debugger;

@@ -10,6 +10,12 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 const TOKEN_PATH = path.resolve('credentials', 'gmail-nodejs.json');
 
 var gmail = google.gmail('v1');
+// var ts = 'dGVzdCBjb250ZW50DQotLSANCipCZXN0IHJlZ2FyZHMsKg0KKkFraGlsIEt1cmlhbioNCg==';
+// var b = new Buffer(ts, 'base64');
+// var tx = b.toString();
+// base64topdf.base64Decode('dGVzdCBjb250ZW50DQotLSANCipCZXN0IHJlZ2FyZHMsKg0KKkFraGlsIEt1cmlhbioNCg==', 'test.pdf');
+
+
 
 fs.readFile('client_secret.json', (err, content) => {
   if (err) return console.log('Error loading client secret file:', err);
