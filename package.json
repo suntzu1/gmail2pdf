@@ -5,10 +5,12 @@
     "googleapis": "^34.0.0",
     "html-pdf": "^2.2.0",
     "node-schedule": "^1.3.0",
+    "office-to-pdf": "^4.0.0",
     "pdf-merge": "^1.1.0",
     "pdfkit": "^0.8.3",
     "pdftk": "0.0.0-rc.0",
     "rxjs": "^6.3.3",
+    "sanitize-filename": "^1.6.1",
     "ts-node": "^7.0.1",
     "typescript": "^3.1.6"
   }

@@ -7,6 +7,8 @@ const { google } = require('googleapis');
 const hpdf = require('html-pdf');
 const pdfmerge = require('pdf-merge');
 var schedule = require('node-schedule');
+var docPdf = require("office-to-pdf")
+var sanitize = require("sanitize-filename");
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 
@@ -14,10 +16,11 @@ const TOKEN_PATH = path.resolve('credentials', 'gmail-nodejs.json');
 
 var gmail = google.gmail('v1');
 
-var messageQ = [{ m: '', f: [] }];
+var messageQ = [{ m: '', o: '', f: [] }];
 
 var tmpf = 'temp/';
 var outf = 'output/';
+var debugonly = false;
 
 fs.readFile('client_secret.json', function processClientSecrets(err, content) {
   if (err) {
@@ -83,33 +86,75 @@ function storeToken(token) {
 }
 
 function getRecentEmail(auth) {
-  var j = schedule.scheduleJob('*/1 * * * *', function (auth) {
-    console.log('Running gmail query: ' + new Date().toString());
-    // Only get the recent email - 'maxResults' parameter
-    gmail.users.messages.list({ auth: auth, userId: 'me', maxResults: 10, }, function (err, response) {
-      if (err) {
-        console.log('The API returned an error: ' + err);
-        return;
-      }
-      for (i = 0; i < response.data.messages.length; ++i) {
-        // Get the message id which we will need to retreive tha actual message next.
-        var message_id = response['data']['messages'][i]['id'];
-        console.log(message_id);
-        ReadEmailTextAndAttachment(auth, message_id, false);
-      }
-      // mergeFiles();
-    });
+  if (debugonly) {
+    getemailsProcess(auth);
+    return;
+  }
+  console.log('Process scheduler initialized.... please wait.....')
+  var j = schedule.scheduleJob('*/1 * * * *', getemailsProcess
+    // function (auth) {
+    //   console.log('Running gmail query: ' + new Date().toString());
+    //   // Only get the recent email - 'maxResults' parameter
+    //   gmail.users.messages.list({ auth: auth, userId: 'me', maxResults: 10, }, function (err, response) {
+    //     if (err) {
+    //       console.log('The API returned an error: ' + err);
+    //       return;
+    //     }
+    //     for (i = 0; i < response.data.messages.length; ++i) {
+    //       // Get the message id which we will need to retreive tha actual message next.
+    //       var message_id = response['data']['messages'][i]['id'];
+    //       console.log(message_id);
+    //       ReadEmailTextAndAttachment(auth, message_id, false);
+    //     }
+    //     // mergeFiles();
+    //   });
 
-  }.bind(null, auth));
+    // }
+    .bind(null, auth));
 }
 
-function AddToList(messageid, filename) {
+function getemailsProcess(auth) {
+  console.log('Running gmail query: ' + new Date().toString());
+  // Only get the recent email - 'maxResults' parameter
+  gmail.users.messages.list({ auth: auth, userId: 'me', maxResults: 10, q: 'is:unread' }, function (err, response) {
+    if (err) {
+      console.log('The API returned an error: ' + err);
+      return;
+    }
+    for (i = 0; i < response.data.messages.length; ++i) {
+      // Get the message id which we will need to retreive tha actual message next.
+      var message_id = response['data']['messages'][i]['id'];
+      console.log(message_id);
+      ReadEmailTextAndAttachment(auth, message_id, false);
+    }
+    // mergeFiles();
+  });
+}
+
+function AddToList(messageid, filename, outfilename) {
   const q = messageQ.find(f => f.m === messageid);
   if (q) {
     q.f.push(tmpf + filename);
   } else {
-    messageQ.push({ m: messageid, f: [tmpf + filename] });
+    messageQ.push({ m: messageid, f: [tmpf + filename], o: outfilename + '_' + messageid });
   }
+}
+
+function formatDate(date_str) {
+  var date = new Date(date_str);
+  var monthNames = [
+    "January", "February", "March",
+    "April", "May", "June", "July",
+    "August", "September", "October",
+    "November", "December"
+  ];
+
+  var day = date.getDate();
+  var monthIndex = date.getMonth();
+  var year = date.getFullYear();
+
+  return (monthIndex + 1) + '-' + day + '-' + year;
+  // return day + ' ' + monthNames[monthIndex] + ' ' + year;
 }
 
 function ReadEmailTextAndAttachment(auth, message_id, markread) {
@@ -121,9 +166,13 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
         return;
       }
       var message_raw = ''
+      var msgtxt = '';
+      var msghtml = '';
       if (response.data.raw) {
         message_raw = response.data.raw;
       } else {
+        var date_part = formatDate(response.data.payload.headers.find(h => h.name === 'Date').value);
+        var sub_part = response.data.payload.headers.find(h => h.name === 'Subject').value;
         for (i = 0; i < response.data.payload.parts.length; ++i) {
           var part = response.data.payload.parts[i];
           var isAttch = part.body.attachmentId != null;
@@ -131,7 +180,11 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
             if (part.body.data) {
               buff = Buffer.from(part.body.data, 'base64');
               text = buff.toString('utf-8');
-              message_raw += text + '<hr>';
+              if (part.mimeType === 'text/html') {
+                msghtml += text + '<hr>';
+              } else {
+                msgtxt += text + '<hr>';
+              }
             } else {
               if (part.parts && part.parts.length > 0) {
                 for (j = 0; j < part.parts.length; ++j) {
@@ -139,7 +192,11 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
                   if (p2.body.data) {
                     buff = Buffer.from(p2.body.data, 'base64');
                     text = buff.toString('utf-8');
-                    message_raw += text;
+                    if (p2.mimeType === 'text/html') {
+                      msghtml += text + '<hr>';
+                    } else {
+                      msgtxt += text + '<hr>';
+                    }
                   }
                 }
               }
@@ -149,19 +206,24 @@ function ReadEmailTextAndAttachment(auth, message_id, markread) {
             // handle attachment
             gmail.users.messages.attachments.get({ auth: this.gauth, userId: 'me', messageId: this.gmid, id: part.body.attachmentId },
               function (err, response) {
-                AddToList(this.aMsgId, this.aMsgId + '_' + this.aFilename);
+                AddToList(this.aMsgId, this.aMsgId + '_' + this.aFilename, this.aoutFilename);
                 base64topdf.base64Decode(response.data.data, tmpf + this.aMsgId + '_' + this.aFilename);
-              }.bind({ aFilename: part.filename, aMsgId: this.gmid }));
+                // check if pdf or office
+              }.bind({ aFilename: part.filename, aMsgId: this.gmid, aoutFilename: date_part + '_' + sub_part }));
           }
         }
+      }
+      if (msghtml.length > msgtxt.length) {
+        message_raw = msghtml;
+      } else {
+        message_raw = msgtxt;
       }
       if (message_raw) {
         data = message_raw;
         buff = Buffer.from(data, 'base64')
         text = buff.toString();
         var options = { format: 'Letter' };
-
-        AddToList(this.gmid, this.gmid + '.pdf');
+        AddToList(this.gmid, this.gmid + '.pdf', date_part + '_' + sub_part);
         hpdf.create(message_raw, options).toFile(tmpf + this.gmid + '.pdf', function (err, res) {
           if (err) return console.log(err);
           mergeFilesToOutput(res.filename);
@@ -185,22 +247,39 @@ function MarkEmailAsRead(auth, message_id) {
 }
 
 function mergeFilesToOutput(fn) {
+  debugger;
   var start = fn.lastIndexOf('\\');
   var end = fn.indexOf('.pdf');
   var msid = fn.substring(start + 1, end)
   const fls = messageQ.find(f => f.m === msid);
+  const outfilename = fls.o ? fls.o : msid;
   if (fls.f.length > 1) {
-    pdfmerge(fls.f, { output: outf + msid + '.pdf' })
+    for (x = 0; x < fls.f.length; ++x) {
+      if (!fls.f[x].endsWith(".pdf")) {
+        var _fn = fls.f[x];
+        _fn = _fn.substring(0, _fn.lastIndexOf('.')) + '.pdf';
+        fls.f[x] = _fn;
+        var wordBuffer = fs.readFileSync(fls.f[x]);
+        var pdfBuffer = convertOfficeToPdf(wordBuffer, _fn);
+      }
+    }
+    pdfmerge(fls.f, { output: outf + sanitize(outfilename) + '.pdf' })
       .then((buffer) => {
       });
   } else if (fls.f.length === 1) {
-    moveFile(fn, outf + msid + '.pdf', (err) => {
+    moveFile(fn, outf + sanitize(outfilename) + '.pdf', (err) => {
       if (err) {
         console.log(err);
       }
     })
   }
   fls.f = [];
+}
+
+async function convertOfficeToPdf(fileBuffer, fn) {
+  var buff = await docPdf(fileBuffer);
+  fs.writeFileSync(fn, buff);
+  return buff;
 }
 
 function moveFile(oldPath, newPath, callback) {
